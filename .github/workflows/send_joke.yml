@@ -1,0 +1,23 @@
+name: Send Daily Joke
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  send-joke:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+    - name: Install dependencies
+      run: |
+        pip install requests beautifulsoup4
+    - name: Run joke bot
+      env:
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+      run: python bot_github_actions.py
