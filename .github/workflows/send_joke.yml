@@ -2,22 +2,64 @@ name: Send Daily Joke
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
-  workflow_dispatch:
+    # Запускать каждые 5 минут для проверки расписания
+    - cron: '*/5 * * * *'
+  workflow_dispatch: # Позволяет запускать вручную
 
 jobs:
   send-joke:
     runs-on: ubuntu-latest
+    
     steps:
-    - uses: actions/checkout@v3
-    - uses: actions/setup-python@v4
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
       with:
-        python-version: '3.x'
+        python-version: '3.9'
+        
     - name: Install dependencies
       run: |
+        python -m pip install --upgrade pip
         pip install requests beautifulsoup4
-    - name: Run joke bot
+        
+    - name: Run main joke bot
       env:
         BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
         CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
       run: python bot_github_actions.py
+      
+    - name: Commit updated config
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add config.json
+        git diff --staged --quiet || git commit -m "Update bot config [skip ci]"
+        git push
+      continue-on-error: true
+
+  admin-bot:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests beautifulsoup4
+        
+    - name: Run admin bot (5 minutes)
+      env:
+        ADMIN_BOT_TOKEN: ${{ secrets.ADMIN_BOT_TOKEN }}
+        BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+        CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
+      run: timeout 300 python admin_bot.py || true
