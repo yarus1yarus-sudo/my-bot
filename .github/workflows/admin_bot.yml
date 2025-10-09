@@ -1,0 +1,30 @@
+name: Admin Bot
+
+on:
+  workflow_dispatch:  # Ручной запуск
+  schedule:
+    - cron: '*/5 * * * *'  # Каждые 5 минут для поддержания работы
+
+jobs:
+  run-admin-bot:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        pip install requests
+    
+    - name: Run Admin Bot
+      env:
+        ADMIN_BOT_TOKEN: ${{ secrets.ADMIN_BOT_TOKEN }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      run: |
+        timeout 300 python admin_bot.py || true
