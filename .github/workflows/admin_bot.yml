@@ -1,9 +1,9 @@
-name: Admin Bot
+name: Admin Bot 24/7
 
 on:
   workflow_dispatch:  # Ручной запуск
   schedule:
-    - cron: '*/5 * * * *'  # Каждые 5 минут для поддержания работы
+    - cron: '*/1 * * * *'  # Каждую минуту для надежности
 
 jobs:
   run-admin-bot:
@@ -22,9 +22,9 @@ jobs:
       run: |
         pip install requests
     
-    - name: Run Admin Bot
+    - name: Run Admin Bot 24/7
       env:
         ADMIN_BOT_TOKEN: ${{ secrets.ADMIN_BOT_TOKEN }}
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       run: |
-        timeout 300 python admin_bot.py || true
+        timeout 3540 python admin_bot.py || true
