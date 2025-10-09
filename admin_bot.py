@@ -1,225 +1,87 @@
-import os
-import json
-import time
 import requests
-from urllib.parse import quote
+import json
+import os
+import random
 
+# Функция для загрузки конфигурации
 def load_config():
     try:
         with open('config.json', 'r', encoding='utf-8') as f:
             return json.load(f)
     except FileNotFoundError:
-        return {
-            "bot_enabled": True,
-            "schedule_minutes": 15,
-            "last_sent": 0,
-            "admin_id": 6396018806,
-            "version": "1.0"
+        # Если файл не существует, создаем его с настройками по умолчанию
+        default_config = {
+            'bot_enabled': True,
+            'schedule': 'daily'
         }
+        with open('config.json', 'w', encoding='utf-8') as f:
+            json.dump(default_config, f, ensure_ascii=False, indent=2)
+        return default_config
+    except json.JSONDecodeError:
+        print("Ошибка чтения config.json. Используем настройки по умолчанию.")
+        return {'bot_enabled': True, 'schedule': 'daily'}
 
-def save_config(config):
-    with open('config.json', 'w', encoding='utf-8') as f:
-        json.dump(config, f, ensure_ascii=False, indent=2)
+# КЛЮЧЕВАЯ ПРОВЕРКА: Читаем конфигурацию в самом начале
+config = load_config()
+if not config.get('bot_enabled', False):
+    print("🛑 Бот отключен в config.json. Выход из программы.")
+    exit()
 
-def send_telegram_message(message, chat_id, reply_markup=None):
-    token = os.getenv('ADMIN_BOT_TOKEN')
-    if not token:
-        print("❌ ADMIN_BOT_TOKEN не найден!")
-        return False
-    
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
+print("✅ Бот включен. Начинаем работу...")
+
+# Получаем токен из переменных окружения
+TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+if not TOKEN:
+    print("❌ Ошибка: TELEGRAM_BOT_TOKEN не найден в переменных окружения")
+    exit()
+
+# ID пользователя для отправки анекдотов
+USER_ID = "6396018806"
+
+# Функция для получения анекдота
+def get_joke():
+    jokes = [
+        "Почему программисты предпочитают тёмную тему? Потому что свет притягивает баги! 🐛",
+        "— Доктор, у меня память как у рыбки! — А с каких пор? — Кто спрашивает? 🐠",
+        "Жена программисту: — Дорогой, сходи в магазин за хлебом, и если будут яйца — купи дюжину. Программист приносит 12 батонов хлеба. 🥖",
+        "— Почему у программистов нет девушек? — Потому что они думают, что 1 + 1 = 10! 💻",
+        "Идёт программист по улице и видит лягушку. Лягушка говорит: — Поцелуй меня, и я стану прекрасной принцессой! Программист берёт лягушку и кладёт в карман. — Почему ты меня не поцеловал? — А зачем мне принцесса? Говорящая лягушка круче! 🐸",
+        "— Мам, а что такое рекурсия? — Иди спроси у папы. — Пап, а что такое рекурсия? — Иди спроси у мамы. 🔄",
+        "Программист приходит домой в 3 утра. Жена: — Ты где был?! — На работе, отлаживал баги. — А я что, дура? — Нет, ты feature! ✨",
+        "Встречаются два программиста: — Как дела? — Как в аду! — То есть как? — 0 и 1! 😈",
+        "— Доктор, помогите! Я думаю, что я компьютер! — Хм, интересно. А как давно это началось? — С момента загрузки... то есть рождения! 💾",
+        "Программист ложится спать. Мозг: — А ты точно закрыл все скобки? Программист встаёт проверять код... 🧠"
+    ]
+    return random.choice(jokes)
+
+# Функция для отправки сообщения
+def send_message(text):
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
     data = {
-        'chat_id': chat_id,
-        'text': message,
+        'chat_id': USER_ID,
+        'text': text,
         'parse_mode': 'HTML'
     }
     
-    if reply_markup:
-        data['reply_markup'] = json.dumps(reply_markup)
-    
     try:
-        response = requests.post(url, data=data)
-        return response.status_code == 200
-    except Exception as e:
-        print(f"❌ Ошибка отправки: {e}")
+        response = requests.post(url, data=data, timeout=10)
+        response.raise_for_status()
+        print(f"✅ Анекдот отправлен успешно!")
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"❌ Ошибка при отправке анекдота: {e}")
         return False
 
-def create_main_menu():
-    """Создает главное меню с кнопками"""
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "🟢 Запустить бот", "callback_data": "start_bot"},
-                {"text": "🔴 Остановить бот", "callback_data": "stop_bot"}
-            ],
-            [
-                {"text": "⏰ Изменить время", "callback_data": "schedule_menu"},
-                {"text": "📊 Статус бота", "callback_data": "status"}
-            ],
-            [
-                {"text": "😄 Отправить анекдот", "callback_data": "send_joke"},
-                {"text": "🔄 Обновить меню", "callback_data": "refresh"}
-            ]
-        ]
-    }
-
-def create_schedule_menu():
-    """Создает меню выбора времени"""
-    return {
-        "inline_keyboard": [
-            [
-                {"text": "5 мин", "callback_data": "schedule_5"},
-                {"text": "10 мин", "callback_data": "schedule_10"},
-                {"text": "15 мин", "callback_data": "schedule_15"}
-            ],
-            [
-                {"text": "30 мин", "callback_data": "schedule_30"},
-                {"text": "1 час", "callback_data": "schedule_60"},
-                {"text": "2 часа", "callback_data": "schedule_120"}
-            ],
-            [
-                {"text": "🔙 Назад", "callback_data": "main_menu"}
-            ]
-        ]
-    }
-
-def process_callback(callback_data, chat_id, config):
-    """Обрабатывает нажатия кнопок"""
-    
-    if chat_id != config['admin_id']:
-        send_telegram_message("❌ У вас нет прав для управления ботом!", chat_id)
-        return config
-    
-    if callback_data == "start_bot":
-        config['bot_enabled'] = True
-        save_config(config)
-        send_telegram_message("🟢 <b>Бот ЗАПУЩЕН!</b>\n\n✅ Анекдоты будут отправляться по расписанию", chat_id, create_main_menu())
-        
-    elif callback_data == "stop_bot":
-        config['bot_enabled'] = False
-        save_config(config)
-        send_telegram_message("🔴 <b>Бот ОСТАНОВЛЕН!</b>\n\n❌ Анекдоты НЕ будут отправляться", chat_id, create_main_menu())
-        
-    elif callback_data == "status":
-        status = "🟢 РАБОТАЕТ" if config['bot_enabled'] else "🔴 ОСТАНОВЛЕН"
-        last_sent = "Никогда" if config['last_sent'] == 0 else time.strftime("%d.%m.%Y %H:%M", time.localtime(config['last_sent']))
-        
-        message = f"""📊 <b>СТАТУС БОТА</b>
-        
-🤖 Состояние: {status}
-⏰ Интервал: {config['schedule_minutes']} минут
-📅 Последний анекдот: {last_sent}
-👤 Админ ID: {config['admin_id']}
-📦 Версия: {config['version']}"""
-        
-        send_telegram_message(message, chat_id, create_main_menu())
-        
-    elif callback_data == "schedule_menu":
-        send_telegram_message("⏰ <b>Выберите интервал отправки:</b>", chat_id, create_schedule_menu())
-        
-    elif callback_data.startswith("schedule_"):
-        minutes = int(callback_data.split("_")[1])
-        config['schedule_minutes'] = minutes
-        save_config(config)
-        
-        hours_text = ""
-        if minutes >= 60:
-            hours = minutes // 60
-            hours_text = f" ({hours} ч.)" if hours == 1 else f" ({hours} ч.)"
-            
-        send_telegram_message(f"⏰ <b>Расписание изменено!</b>\n\n✅ Новый интервал: {minutes} минут{hours_text}", chat_id, create_main_menu())
-        
-    elif callback_data == "send_joke":
-        send_telegram_message("😄 <b>Команда отправлена!</b>\n\n🚀 Анекдот будет отправлен при следующем запуске бота", chat_id, create_main_menu())
-        config['last_sent'] = 0  # Сбрасываем время для принудительной отправки
-        save_config(config)
-        
-    elif callback_data == "main_menu" or callback_data == "refresh":
-        send_telegram_message("🎛️ <b>ПАНЕЛЬ УПРАВЛЕНИЯ БОТОМ</b>\n\nВыберите действие:", chat_id, create_main_menu())
-    
-    return config
-
-def process_command(command, chat_id, config):
-    """Обрабатывает текстовые команды"""
-    
-    if chat_id != config['admin_id']:
-        send_telegram_message("❌ У вас нет прав для управления ботом!", chat_id)
-        return config
-    
-    if command in ['/start', '/help', '/menu']:
-        welcome_message = f"""🎛️ <b>ПАНЕЛЬ УПРАВЛЕНИЯ БОТОМ</b>
-
-👋 Добро пожаловать, Админ!
-
-🤖 Бот для отправки анекдотов
-🎯 Управление через кнопки ниже
-
-Выберите действие:"""
-        
-        send_telegram_message(welcome_message, chat_id, create_main_menu())
-    
-    return config
-
-def main():
-    print("🚀 Админ-бот запущен...")
-    
-    token = os.getenv('ADMIN_BOT_TOKEN')
-    if not token:
-        print("❌ ADMIN_BOT_TOKEN не найден!")
-        return
-    
-    offset = 0
-    start_time = time.time()
-    timeout_duration = 300  # 5 минут
-    
-    config = load_config()
-    
-    while time.time() - start_time < timeout_duration:
-        try:
-            url = f"https://api.telegram.org/bot{token}/getUpdates"
-            params = {'offset': offset, 'timeout': 10}
-            
-            response = requests.get(url, params=params, timeout=15)
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                if data['ok'] and data['result']:
-                    for update in data['result']:
-                        offset = update['update_id'] + 1
-                        
-                        # Обработка текстовых сообщений
-                        if 'message' in update:
-                            message = update['message']
-                            chat_id = message['chat']['id']
-                            text = message.get('text', '')
-                            
-                            print(f"📨 Получено сообщение: {text} от {chat_id}")
-                            config = process_command(text, chat_id, config)
-                        
-                        # Обработка нажатий кнопок
-                        elif 'callback_query' in update:
-                            callback = update['callback_query']
-                            chat_id = callback['from']['id']
-                            callback_data = callback['data']
-                            
-                            print(f"🔘 Нажата кнопка: {callback_data} от {chat_id}")
-                            
-                            # Отвечаем на callback_query
-                            callback_url = f"https://api.telegram.org/bot{token}/answerCallbackQuery"
-                            requests.post(callback_url, data={'callback_query_id': callback['id']})
-                            
-                            config = process_callback(callback_data, chat_id, config)
-            
-            else:
-                print(f"❌ Ошибка API: {response.status_code}")
-                time.sleep(5)
-                
-        except Exception as e:
-            print(f"❌ Ошибка: {e}")
-            time.sleep(5)
-    
-    print("⏰ Время работы админ-бота истекло")
-
+# Основная логика
 if __name__ == "__main__":
-    main()
+    print("🤖 Запуск бота для отправки анекдота...")
+    
+    # Получаем анекдот
+    joke = get_joke()
+    print(f"📝 Выбран анекдот: {joke[:50]}...")
+    
+    # Отправляем анекдот
+    if send_message(f"😄 <b>Анекдот дня:</b>\n\n{joke}"):
+        print("🎉 Задача выполнена!")
+    else:
+        print("💥 Задача провалена!")
