@@ -1,5 +1,5 @@
 {
-  "bot_enabled": true,
+  "bot_enabled": false,
   "schedule_minutes": 15,
   "last_sent": 0,
   "admin_id": 6396018806,
